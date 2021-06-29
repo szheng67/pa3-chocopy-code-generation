@@ -14,4 +14,9 @@
 #java -cp "chocopy-ref.jar:target/assignment.jar" chocopy.ChocoPy --pass=..s src/test/data/pa3/sample/call.typed.json --out src/test/data/pa3/sample/call.s
 #java -cp "chocopy-ref.jar:target/assignment.jar" chocopy.ChocoPy --run src/test/data/pa3/sample/call.s
 
-java -cp "chocopy-ref.jar:target/assignment.jar" chocopy.ChocoPy --pass=rrs --run src/test/data/pa3/sample/call.py
+#java -cp "chocopy-ref.jar:target/assignment.jar" chocopy.ChocoPy --pass=rrs --run src/test/data/pa3/sample/call.py
+java -cp "chocopy-ref.jar:target/assignment.jar" chocopy.ChocoPy --pass=rrr --run src/test/data/pa3/sample/call.py
+
+#python src/test/data/pa3/benchmarks/exp.py
+java -cp "chocopy-ref.jar:target/assignment.jar" chocopy.ChocoPy \
+--pass=rrs --run --profile src/test/data/pa3/benchmarks/exp.py
