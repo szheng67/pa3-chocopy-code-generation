@@ -1,11 +1,12 @@
 package chocopy.pa3;
 
+import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
 import chocopy.common.analysis.SymbolTable;
 import chocopy.common.analysis.AbstractNodeAnalyzer;
-import chocopy.common.astnodes.Stmt;
-import chocopy.common.astnodes.ReturnStmt;
+import chocopy.common.astnodes.*;
 import chocopy.common.codegen.CodeGenBase;
 import chocopy.common.codegen.FuncInfo;
 import chocopy.common.codegen.Label;
@@ -158,7 +159,43 @@ public class CodeGenImpl extends CodeGenBase {
             return null;
         }
 
-        // FIXME: More, of course.
+        @Override
+        public Void analyze(ExprStmt stmt) {
+            String kind = stmt.expr.kind;
+            switch(kind){
+                case "CallExpr":
+                    CallExpr callExpr = (CallExpr) stmt.expr;
+                    String name = callExpr.function.name;
+                    switch (name){
+                        case "print":
+
+                            ArrayList args = (ArrayList) callExpr.args;
+                            for(int i=0; i<args.size(); i++){
+                                if(args.get(i) instanceof BooleanLiteral){
+                                    Label l= new Label("print_9");
+                                    BooleanLiteral arg = (BooleanLiteral) args.get(i);
+                                    if (arg.value==true){
+                                        Label t= new Label("const_3");
+                                        backend.emitLI(T0,1,"print true");
+                                        backend.emitSW(T0,A0,getAttrOffset(boolClass,"__bool__"),"store bool value");
+                                    }else{
+                                        backend.emitLI(T0,0,"print false");
+                                        backend.emitSW(T0,A0,getAttrOffset(boolClass,"__bool__"),"store bool value");
+                                    }
+                                    backend.emitJAL(l,"print bool");
+                                }
+                            }
+
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+                default:
+                    break;
+            }
+            return null;
+        }
 
     }
 
