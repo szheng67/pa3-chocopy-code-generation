@@ -16,20 +16,20 @@ import java.nio.file.Path;
 public class StudentCodeGen {
 
 
-//    public static void main(String[] args) throws IOException {
-////        String path = "src/test/data/pa3/benchmarks/exp.py.ast.typed";
-//        String path = "src/test/data/pa3/subtests/literal_bool.py.ast.typed";
-//
-//
-//        String content = Files.readString(Path.of(path), StandardCharsets.US_ASCII);
-//
-//        Program p = (Program) Node.fromJSON(content);
-//
-////        System.out.println(p);
-//
-//        String x= process(p, true);
-////        System.out.println(x);
-//    }
+    public static void main(String[] args) throws IOException {
+//        String path = "src/test/data/pa3/benchmarks/exp.py.ast.typed";
+        String path = "src/test/data/pa3/subtests/id_local.py.ast.typed";
+
+
+        String content = Files.readString(Path.of(path), StandardCharsets.US_ASCII);
+
+        Program p = (Program) Node.fromJSON(content);
+
+//        System.out.println(p);
+
+        String x= process(p, true);
+        System.out.println(x);
+    }
 
     /**
      * Perform code generation from PROGRAM, assumed to be well-typed,

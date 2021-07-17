@@ -6,13 +6,11 @@ import java.util.List;
 
 import chocopy.common.analysis.SymbolTable;
 import chocopy.common.analysis.AbstractNodeAnalyzer;
+import chocopy.common.analysis.types.ValueType;
 import chocopy.common.astnodes.*;
-import chocopy.common.codegen.CodeGenBase;
-import chocopy.common.codegen.FuncInfo;
-import chocopy.common.codegen.Label;
-import chocopy.common.codegen.RiscVBackend;
-import chocopy.common.codegen.SymbolInfo;
+import chocopy.common.codegen.*;
 
+import static chocopy.common.analysis.types.Type.STR_TYPE;
 import static chocopy.common.codegen.RiscVBackend.Register.*;
 
 /**
@@ -81,16 +79,46 @@ public class CodeGenImpl extends CodeGenBase {
     protected void emitUserDefinedFunction(FuncInfo funcInfo) {
         backend.emitGlobalLabel(funcInfo.getCodeLabel());
         StmtAnalyzer stmtAnalyzer = new StmtAnalyzer(funcInfo);
+        backend.emitADDI(SP,SP,"-@f.size","Reserve space for stack frame.");
+        backend.emitSW(RA,SP,"@f.size-4","return address");
+        backend.emitSW(FP,SP,"@f.size-8","control link");
+        backend.emitADDI(FP,SP,"@f.size","New fp is at old SP");
 
+        RiscVBackend.Register[] rgs= new RiscVBackend.Register[]{A0, A1,A2,A3,A4,A5,A6};
+        int i=0;
+        for (StackVarInfo stv : funcInfo.getLocals()) {
+            if (stv.getInitialValue() instanceof IntegerLiteral){
+                IntegerLiteral val = (IntegerLiteral) stv.getInitialValue();
+                backend.emitLI(rgs[i],val.value,"val");
+                backend.emitSW(rgs[i],FP,"-12","local var");
+                backend.emitLW(rgs[i],FP,"-12","load");
+            }
+        }
         for (Stmt stmt : funcInfo.getStatements()) {
             stmt.dispatch(stmtAnalyzer);
         }
 
-        backend.emitMV(A0, ZERO, "Returning None implicitly");
-        backend.emitLocalLabel(stmtAnalyzer.epilogue, "Epilogue");
+//       addi sp, sp, -@f.size                    # Reserve space for stack frame.
+//       sw ra, @f.size-4(sp)                     # return address
+//       sw fp, @f.size-8(sp)                     # control link
+//       addi fp, sp, @f.size                     # New fp is at old SP.
+//        li a0, 1                                 # Load integer literal 1
+//        sw a0, -12(fp)                           # local variable x
+//        lw a0, -12(fp)                           # Load var: f.x
+//        j label_2                                # Go to return
+//                mv a0, zero                              # Load None
+//        j label_2                                # Jump to function epilogue
+//        label_2:                                   # Epilogue
+//                .equiv @f.size, 16
+//        lw ra, -4(fp)                            # Get return address
+//        lw fp, -8(fp)                            # Use control link to restore caller's fp
+//        addi sp, sp, @f.size                     # Restore stack pointer
+//        jr ra                                    # Return to caller
 
-        // FIXME: {... reset fp etc. ...}
-        backend.emitJR(RA, "Return to caller");
+
+
+//        // FIXME: {... reset fp etc. ...}
+//        backend.emitJR(RA, "Return to caller");
     }
 
     /** An analyzer that encapsulates code generation for statments. */
@@ -155,7 +183,23 @@ public class CodeGenImpl extends CodeGenBase {
             // this is wrong, and you'll have to fix it.
             // This is here just to demonstrate how to emit a
             // RISC-V instruction.
-            backend.emitMV(ZERO, ZERO, "No-op");
+//            backend.emitMV(ZERO, ZERO, "No-op");
+            //        j label_2                                # Jump to function epilogue
+//        label_2:                                   # Epilogue
+//                .equiv @f.size, 16
+//        lw ra, -4(fp)                            # Get return address
+//        lw fp, -8(fp)                            # Use control link to restore caller's fp
+//        addi sp, sp, @f.size                     # Restore stack pointer
+//        jr ra                                    # Return to caller
+            Label l= new Label("label_2");
+            backend.emitJ(l,"");
+            backend.emitLocalLabel(l,"return");
+            backend.emitInsn(".equiv @f.size, 16","");
+            backend.emitLW(RA,FP,"-4","");
+            backend.emitLW(FP,FP,"-8","");
+            backend.emitADDI(SP,SP,"@f.size","");
+            backend.emitJR(RA,"return to caller");
+
             return null;
         }
 
@@ -164,32 +208,8 @@ public class CodeGenImpl extends CodeGenBase {
             String kind = stmt.expr.kind;
             switch(kind){
                 case "CallExpr":
-                    CallExpr callExpr = (CallExpr) stmt.expr;
-                    String name = callExpr.function.name;
-                    switch (name){
-                        case "print":
-
-                            ArrayList args = (ArrayList) callExpr.args;
-                            for(int i=0; i<args.size(); i++){
-                                if(args.get(i) instanceof BooleanLiteral){
-                                    Label l= new Label("print_9");
-                                    BooleanLiteral arg = (BooleanLiteral) args.get(i);
-                                    if (arg.value==true){
-                                        Label t= new Label("const_3");
-                                        backend.emitLI(T0,1,"print true");
-                                        backend.emitSW(T0,A0,getAttrOffset(boolClass,"__bool__"),"store bool value");
-                                    }else{
-                                        backend.emitLI(T0,0,"print false");
-                                        backend.emitSW(T0,A0,getAttrOffset(boolClass,"__bool__"),"store bool value");
-                                    }
-                                    backend.emitJAL(l,"print bool");
-                                }
-                            }
-
-                            break;
-                        default:
-                            break;
-                    }
+                    CallExpr callexpr = (CallExpr) stmt.expr;
+                        analyze(callexpr);
                     break;
                 default:
                     break;
@@ -197,7 +217,85 @@ public class CodeGenImpl extends CodeGenBase {
             return null;
         }
 
+        @Override
+        public Void analyze(CallExpr stmt) {
+            String name = stmt.function.name;
+            switch (name){
+                case "print":
+                    ArrayList args = (ArrayList) stmt.args;
+                    for(int i=0; i<args.size(); i++){
+                        if(args.get(i) instanceof BooleanLiteral){
+                            Label l= new Label("print_9");
+                            BooleanLiteral arg = (BooleanLiteral) args.get(i);
+                            if (arg.value==true){
+                                Label t= new Label("const_3");
+                                backend.emitLI(T0,1,"print true");
+                                backend.emitSW(T0,A0,getAttrOffset(boolClass,"__bool__"),"store bool value");
+                            }else{
+                                backend.emitLI(T0,0,"print false");
+                                backend.emitSW(T0,A0,getAttrOffset(boolClass,"__bool__"),"store bool value");
+                            }
+                            backend.emitJAL(l,"print bool");
+                        }else if(args.get(i) instanceof IntegerLiteral){
+                            Label l= new Label("print_7");
+                            IntegerLiteral arg = (IntegerLiteral) args.get(i);
+
+                            backend.emitLI(T0,arg.value,"print int");
+                            backend.emitSW(T0,A0,getAttrOffset(intClass,"__int__"),"store int value");
+                            backend.emitJAL(l,"print int");
+
+                        }else if(args.get(i) instanceof StringLiteral){
+                            Label l= new Label("print_8");
+                            Label m= new Label("const_2");
+                            StringLiteral arg = (StringLiteral) args.get(i);
+                            emitConstant(arg,STR_TYPE,"msg");
+                            backend.emitLA(A0,m,"message");
+                            backend.emitJAL(l,"print str");
+//
+                        }else if(args.get(i) instanceof Identifier){
+                            Label l= new Label(String.format("$%s",((Identifier) args.get(i)).name));
+                            Label pt= new Label("$print");
+                            backend.emitLW(A0,l,"load global");
+                            Identifier arg = (Identifier) args.get(i);
+
+                            if(arg.getInferredType().className().equals("int")){
+                                Label mkint= new Label("makeint");
+                                backend.emitJAL(mkint,"makeint");
+                            }
+                            backend.emitSW(A0,FP,-8,"push arg");
+                            backend.emitADDI(SP,FP,-8,"set SP");
+                            backend.emitJAL(pt,"print");
+
+
+                        }else if(args.get(i) instanceof CallExpr){
+                            CallExpr callexpr = (CallExpr) args.get(i);
+                            analyze(callexpr);
+                            Label pt= new Label("$print");
+                            backend.emitJAL(pt,"print");
+                        }
+                    }
+
+                    break;
+                default:
+//                    addi sp, fp, -@..main.size               # Set SP to stack frame top.
+//  jal makeint                              # Box integer
+//  sw a0, -16(fp)                           # Push argument 0 from last.
+//  addi sp, fp, -16                         # Set SP to last argument.
+                    backend.emitADDI(SP,FP,"-16","");
+                    Label l = new Label("$"+stmt.function.name);
+                    backend.emitJAL(l,"");
+//                    backend.emitADDI(SP,FP,"-@..main.size", "");
+                    Label m= new Label("makeint");
+                    backend.emitJAL(m,"");
+                    backend.emitSW(A0,FP,"-16","");
+                    backend.emitADDI(SP,FP,"-16","");
+
+            }
+
+            return null;
+        }
     }
+
 
     /**
      * Emits custom code in the CODE segment.
@@ -226,6 +324,21 @@ public class CodeGenImpl extends CodeGenBase {
         emitErrorFunc(errorNone, "Operation on None");
         emitErrorFunc(errorDiv, "Division by zero");
         emitErrorFunc(errorOob, "Index out of bounds");
+
+        backend.emitGlobalLabel(new Label("makeint"));
+        backend.emitInsn("addi sp, sp, -8","");
+        backend.emitInsn("sw ra, 4(sp)","");
+        backend.emitInsn("sw a0, 0(sp)","");
+        backend.emitInsn("la a0, $int$prototype","");
+        backend.emitInsn("jal ra, alloc","");
+        backend.emitInsn("lw t0, 0(sp)","");
+        backend.emitInsn("sw t0, @.__int__(a0)","");
+        backend.emitInsn("lw ra, 4(sp)","");
+        backend.emitInsn("addi sp, sp, 8","");
+        backend.emitInsn("jr ra","");
+
+//        emitStdFunc("$f");
+
     }
 
     /** Emit an error routine labeled ERRLABEL that aborts with message MSG. */

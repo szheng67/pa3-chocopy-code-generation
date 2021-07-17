@@ -1,4 +1,4 @@
-Reading src/test/data/pa3/subtests/literal_bool.py
+Reading src/test/data/pa3/subtests/id_local.py
   .equiv @sbrk, 9
   .equiv @print_string, 4
   .equiv @print_char, 11
@@ -98,14 +98,10 @@ main:
   sw fp, @..main.size-8(sp)                # control link
   addi fp, sp, @..main.size                # New fp is at old SP.
   jal initchars                            # Initialize one-character strings.
-  li a0, 1                                 # Load boolean literal: true
-  jal makebool                             # Box boolean
-  sw a0, -16(fp)                           # Push argument 0 from last.
   addi sp, fp, -16                         # Set SP to last argument.
-  jal $print                               # Invoke function: print
+  jal $f                                   # Invoke function: f
   addi sp, fp, -@..main.size               # Set SP to stack frame top.
-  li a0, 0                                 # Load boolean literal: false
-  jal makebool                             # Box boolean
+  jal makeint                              # Box integer
   sw a0, -16(fp)                           # Push argument 0 from last.
   addi sp, fp, -16                         # Set SP to last argument.
   jal $print                               # Invoke function: print
@@ -241,6 +237,25 @@ input_done:
   lw fp, -8(fp)
   addi sp, sp, 16
   jr ra
+
+.globl $f
+$f:
+  addi sp, sp, -@f.size                    # Reserve space for stack frame.
+  sw ra, @f.size-4(sp)                     # return address
+  sw fp, @f.size-8(sp)                     # control link
+  addi fp, sp, @f.size                     # New fp is at old SP.
+  li a0, 1                                 # Load integer literal 1
+  sw a0, -12(fp)                           # local variable x
+  lw a0, -12(fp)                           # Load var: f.x
+  j label_2                                # Go to return
+  mv a0, zero                              # Load None
+  j label_2                                # Jump to function epilogue
+label_2:                                   # Epilogue
+  .equiv @f.size, 16
+  lw ra, -4(fp)                            # Get return address
+  lw fp, -8(fp)                            # Use control link to restore caller's fp
+  addi sp, sp, @f.size                     # Restore stack pointer
+  jr ra                                    # Return to caller
 
 .globl alloc
 alloc:
